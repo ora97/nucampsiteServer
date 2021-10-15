@@ -22,7 +22,7 @@ const connect = mongoose.connect(url, {
 
 connect.then(() => console.log('Connected correctly to server'),
   err => console.log(err)
-  );
+);
 
 var app = express();
 
@@ -33,28 +33,40 @@ app.set('view engine', 'jade');
 app.use(logger('dev'));
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
-app.use(cookieParser());
+app.use(cookieParser('12345-67890-09876-54321'));
+
+
 
 function auth(req, res, next) {
-  console.log(req.headers);
-  const authHeader = req.headers.authorization;
-  if (!authHeader) {
-    const err = new Error('You are not authenticated!');
-    res.setHeader('WWW-Authenticate', 'Basic');
-    err.status = 401;
-    return next(err);
-  }
+  if (!req.signedCookies.user) {
+    const authHeader = req.headers.authorization;
+    if (!authHeader) {
+      const err = new Error('You are not authenticated!');
+      res.setHeader('WWW-Authenticate', 'Basic');
+      err.status = 401;
+      return next(err);
+    }
 
-  const auth = Buffer.from(authHeader.split(' ')[1], 'base64').toString().split(':');
-  const user = auth[0];
-  const pass = auth[1];
-  if (user === 'admin' && pass === 'password') {
-    return next();
+    const auth = Buffer.from(authHeader.split(' ')[1], 'base64').toString().split(':');
+    const user = auth[0];
+    const pass = auth[1];
+    if (user === 'admin' && pass === 'password') {
+      res.cookie('user', 'admin', { signed: true });
+      return next();
+    } else {
+      const err = new Error('You are not authenticated!');
+      res.setHeader('WWW-Authenticate', 'Basic');
+      err.status = 401;
+      return next(err);
+    }
   } else {
-    const err = new Error('You are not authenticated!');
-    res.setHeader('WWW-Authenticate', 'Basic');
-    err.status = 401;
-    return next(err);
+    if (req.signedCookies.user === 'admin') {
+      return next();
+    } else {
+      const err = new Error('You are not authenticated!');
+      err.status = 401;
+      return next(err);
+    }
   }
 }
 
@@ -69,12 +81,12 @@ app.use('/promotions', promotionRouter);
 app.use('/partners', partnerRouter);
 
 // catch 404 and forward to error handler
-app.use(function(req, res, next) {
+app.use(function (req, res, next) {
   next(createError(404));
 });
 
 // error handler
-app.use(function(err, req, res, next) {
+app.use(function (err, req, res, next) {
   // set locals, only providing error in development
   res.locals.message = err.message;
   res.locals.error = req.app.get('env') === 'development' ? err : {};
